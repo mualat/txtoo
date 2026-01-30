@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Encrypt & Store Text</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 40px;
+            max-width: 600px;
+            width: 100%;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 28px;
+        }
+
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+
+        .input-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            color: #555;
+            margin-bottom: 8px;
+            font-weight: 500;
+        }
+
+        textarea,
+        input {
+            width: 100%;
+            padding: 12px 16px;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            font-size: 16px;
+            transition: all 0.3s ease;
+            font-family: inherit;
+        }
+
+        textarea {
+            min-height: 120px;
+            resize: vertical;
+        }
+
+        textarea:focus,
+        input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        button {
+            width: 100%;
+            padding: 14px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .result {
+            margin-top: 30px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 10px;
+            display: none;
+        }
+
+        .result.show {
+            display: block;
+            animation: slideIn 0.3s ease;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .result h3 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 18px;
+        }
+
+        .result a {
+            color: #667eea;
+            text-decoration: none;
+            word-break: break-all;
+        }
+
+        .result a:hover {
+            text-decoration: underline;
+        }
+
+        .error {
+            background: #fee;
+            color: #c33;
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin-top: 15px;
+            display: none;
+        }
+
+        .error.show {
+            display: block;
+        }
+
+        .lock-icon {
+            font-size: 48px;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <div class="lock-icon">🔐</div>
+        <h1>Encrypt & Store Text</h1>
+        <p class="subtitle">Encrypt your text with a password and share it securely</p>
+
+        <div class="input-group">
+            <label for="text">Your Secret Text</label>
+            <textarea id="text" placeholder="Enter the text you want to encrypt..."></textarea>
+        </div>
+
+        <div class="input-group">
+            <label for="password">Password</label>
+            <input type="password" id="password" placeholder="Enter a strong password" autocomplete="off">
+        </div>
+
+        <div class="input-group">
+            <label for="ttl">Expires In (seconds)</label>
+            <input type="number" id="ttl" value="86400" min="60"
+                placeholder="Time to live in seconds (default: 24 hours)">
+        </div>
+
+        <button id="encryptBtn">Encrypt & Store</button>
+
+        <div class="error" id="error"></div>
+
+        <div class="result" id="result">
+            <h3>✅ Text Encrypted & Stored!</h3>
+            <p style="margin-bottom: 10px; color: #666;">Share this link:</p>
+            <a id="resultLink" href="#" target="_blank"></a>
+            <p style="margin-top: 15px; font-size: 14px; color: #999;">
+                Expires: <span id="expiresAt"></span>
+            </p>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = 'http://localhost:8787';
+
+        // Base64URL encode helper
+        function base64UrlEncode(bytes) {
+            let binary = '';
+            for (let i = 0; i < bytes.length; i++) {
+                binary += String.fromCharCode(bytes[i]);
+            }
+            return btoa(binary)
+                .replace(/\+/g, '-')
+                .replace(/\//g, '_')
+                .replace(/=/g, '');
+        }
+
+        // Derive key from password
+        async function deriveKey(password, salt) {
+            const encoder = new TextEncoder();
+            const passwordBuffer = encoder.encode(password);
+
+            const keyMaterial = await crypto.subtle.importKey(
+                'raw',
+                passwordBuffer,
+                { name: 'PBKDF2' },
+                false,
+                ['deriveBits', 'deriveKey']
+            );
+
+            return await crypto.subtle.deriveKey(
+                {
+                    name: 'PBKDF2',
+                    salt: salt,
+                    iterations: 100000,
+                    hash: 'SHA-256'
+                },
+                keyMaterial,
+                { name: 'AES-GCM', length: 256 },
+                false,
+                ['encrypt']
+            );
+        }
+
+        // Encrypt function
+        async function encrypt(text, password) {
+            const encoder = new TextEncoder();
+            const data = encoder.encode(text);
+
+            // Generate random IV
+            const iv = crypto.getRandomValues(new Uint8Array(12));
+
+            // Derive key using IV as salt
+            const key = await deriveKey(password, iv);
+
+            // Encrypt
+            const cipherText = await crypto.subtle.encrypt(
+                {
+                    name: 'AES-GCM',
+                    iv: iv
+                },
+                key,
+                data
+            );
+
+            return {
+                cipherText: base64UrlEncode(new Uint8Array(cipherText)),
+                iv: base64UrlEncode(iv)
+            };
+        }
+
+        // Event listeners
+        const textInput = document.getElementById('text');
+        const passwordInput = document.getElementById('password');
+        const ttlInput = document.getElementById('ttl');
+        const encryptBtn = document.getElementById('encryptBtn');
+        const errorDiv = document.getElementById('error');
+        const resultDiv = document.getElementById('result');
+        const resultLink = document.getElementById('resultLink');
+        const expiresAt = document.getElementById('expiresAt');
+
+        encryptBtn.addEventListener('click', async () => {
+            const text = textInput.value;
+            const password = passwordInput.value;
+            const ttl = ttlInput.value;
+
+            if (!text) {
+                showError('Please enter some text to encrypt');
+                return;
+            }
+
+            if (!password) {
+                showError('Please enter a password');
+                return;
+            }
+
+            if (!ttl || ttl < 60) {
+                showError('TTL must be at least 60 seconds');
+                return;
+            }
+
+            encryptBtn.disabled = true;
+            encryptBtn.textContent = 'Encrypting...';
+            errorDiv.classList.remove('show');
+            resultDiv.classList.remove('show');
+
+            try {
+                // Encrypt the text
+                const { cipherText, iv } = await encrypt(text, password);
+
+                // Store encrypted data using POST /submit
+                const response = await fetch(
+                    `${API_URL}/submit?ttl=${ttl}&cipherText=${cipherText}&iv=${iv}`,
+                    { method: 'POST' }
+                );
+
+                if (!response.ok) {
+                    throw new Error('Failed to store encrypted text');
+                }
+
+                const result = await response.json();
+
+                if (result.type !== 'success') {
+                    throw new Error(result.message || 'Failed to store encrypted text');
+                }
+
+                // Show result
+                resultLink.href = result.data.url;
+                resultLink.textContent = result.data.url;
+                expiresAt.textContent = new Date(result.data.expiresAt * 1000).toLocaleString();
+                resultDiv.classList.add('show');
+                encryptBtn.textContent = 'Encrypt & Store';
+
+                // Clear inputs
+                textInput.value = '';
+                passwordInput.value = '';
+            } catch (error) {
+                showError(error.message);
+                encryptBtn.textContent = 'Encrypt & Store';
+            } finally {
+                encryptBtn.disabled = false;
+            }
+        });
+
+        function showError(message) {
+            errorDiv.textContent = message;
+            errorDiv.classList.add('show');
+        }
+    </script>
+</body>
+
+</html>

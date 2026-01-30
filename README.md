@@ -1,4 +1,4 @@
-# TXToo
+# 🔏 TXToo
 
 **Secure Text Share - Encrypted in your browser, ephemeral by design.**
 
@@ -50,7 +50,7 @@ TXToo is a zero-knowledge, end-to-end encrypted text sharing application. All en
 
 1. **Clone the repository**
    ```bash
-   git clone <your-repo-url>
+   git clone https://github.com/mualat/txtoo.git
    cd TXToo
    ```
 
